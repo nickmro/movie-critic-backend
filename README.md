@@ -10,6 +10,30 @@ Movie critic is an application that allows users to concisely review and rate mo
 
 ```
 .
-+-- cmd    // application commands
-+-- critic // models and components
++-- cmd          // application commands
++-- critic       // models and components
+    +-- postgres // postgreSQL database functions
+```
+
+## Setup
+
+### Go
+
+Install Go by following the instructions here: [https://golang.org/doc/install](https://golang.org/doc/install)
+
+### PostgreSQL
+
+Install and run postgreSQL:
+
+```bash
+brew install postgresql@11
+brew services start postgresql@11
+```
+
+## Test
+
+To run the test suite:
+
+```bash
+make test DB_NAME=movie_critic_test
 ```
