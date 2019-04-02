@@ -15,3 +15,8 @@ func (db *DB) MustBegin() *Tx {
 	}
 	return &Tx{tx}
 }
+
+// Query queries the database.
+func (db *DB) Query(query string, args []interface{}) (*sql.Rows, error) {
+	return db.DB.Query(query, args...)
+}

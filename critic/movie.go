@@ -12,20 +12,13 @@ type Movie struct {
 	DeletedAt *time.Time // The time of deletion
 }
 
-// MovieQueryParams are the parameters used to query movies.
-type MovieQueryParams struct {
-	BeforeID int64 // The maximum id to return
-}
-
-// MovieListOptions are the options used to list movies.
-type MovieListOptions struct {
-	Limit uint64
-}
+// MovieQueryParam is a parameter used to filter movies.
+type MovieQueryParam string
 
 // MovieRepository defines the operations that may be performed on a movie repository.
 type MovieRepository interface {
-	Begin() MovieTx
-	Query(params MovieQueryParams, options MovieListOptions) ([]*Movie, error)
+	BeginTx() MovieTx
+	Query(params map[MovieQueryParam]interface{}) ([]*Movie, error)
 	Get(id int64) (*Movie, error)
 }
 
@@ -37,3 +30,9 @@ type MovieTx interface {
 	Commit() error
 	Rollback() error
 }
+
+// Movie query params.
+const (
+	MovieQueryParamBefore = "before"
+	MovieQueryParamLimit  = "limit"
+)

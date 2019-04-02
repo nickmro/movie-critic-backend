@@ -14,7 +14,10 @@ var _ = Describe("MovieDatabase", func() {
 	var db *MovieDatabase
 
 	BeforeEach(func() {
-		db = &MovieDatabase{DB: NewDB(os.Getenv("DB_URL"))}
+		db = &MovieDatabase{
+			DB:          NewDB(os.Getenv("DB_URL")),
+			ErrorLogger: &Logger{},
+		}
 	})
 
 	AfterEach(func() {
@@ -25,7 +28,7 @@ var _ = Describe("MovieDatabase", func() {
 		var tx *MovieTx
 
 		BeforeEach(func() {
-			tx = db.Begin().(*MovieTx)
+			tx = db.BeginTx().(*MovieTx)
 		})
 
 		AfterEach(func() {
@@ -48,7 +51,7 @@ var _ = Describe("MovieDatabase", func() {
 		var tx *MovieTx
 
 		BeforeEach(func() {
-			tx = db.Begin().(*MovieTx)
+			tx = db.BeginTx().(*MovieTx)
 		})
 
 		AfterEach(func() {
@@ -75,7 +78,7 @@ var _ = Describe("MovieDatabase", func() {
 		var tx *MovieTx
 
 		BeforeEach(func() {
-			tx = db.Begin().(*MovieTx)
+			tx = db.BeginTx().(*MovieTx)
 		})
 
 		AfterEach(func() {
@@ -99,28 +102,35 @@ var _ = Describe("MovieDatabase", func() {
 
 	Describe("Query", func() {
 		var tx *MovieTx
+		var records = []*critic.Movie{
+			&critic.Movie{
+				Title: "Jaws",
+				Year:  "1975",
+			},
+			&critic.Movie{
+				Title: "Citizen Kane",
+				Year:  "1941",
+			},
+		}
 
 		BeforeEach(func() {
-			tx = db.Begin().(*MovieTx)
+			tx = db.BeginTx().(*MovieTx)
+			for _, record := range records {
+				tx.Create(record)
+			}
+			tx.Commit()
+		})
+
+		AfterEach(func() {
+			tx = db.BeginTx().(*MovieTx)
+			for _, record := range records {
+				tx.Delete(record.ID)
+			}
+			tx.Commit()
 		})
 
 		It("returns a list of movies", func() {
-			tx.Create(&critic.Movie{
-				Title: "Jaws",
-				Year:  "1975",
-			})
-
-			tx.Create(&critic.Movie{
-				Title: "Citizen Kane",
-				Year:  "1941",
-			})
-
-			tx.Commit()
-
-			movies, err := db.Query(
-				critic.MovieQueryParams{},
-				critic.MovieListOptions{},
-			)
+			movies, err := db.Query(nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(movies).ToNot(BeNil())
 			Expect(len(movies)).To(Equal(2))
@@ -128,91 +138,59 @@ var _ = Describe("MovieDatabase", func() {
 
 		Context("when a before ID is provided", func() {
 			It("only returns movies before the given ID", func() {
-				jaws := &critic.Movie{
-					Title: "Jaws",
-					Year:  "1975",
-				}
-				tx.Create(jaws)
-
-				citizenKane := &critic.Movie{
-					Title: "Citizen Kane",
-					Year:  "1941",
-				}
-				tx.Create(citizenKane)
-
-				movies, err := db.Query(
-					critic.MovieQueryParams{
-						BeforeID: citizenKane.ID,
-					},
-					critic.MovieListOptions{},
-				)
+				movies, err := db.Query(map[critic.MovieQueryParam]interface{}{
+					critic.MovieQueryParamBefore: records[1].ID,
+				})
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(movies).ToNot(BeNil())
 				Expect(movies).To(HaveLen(1))
-				Expect(movies[0].ID).To(Equal(jaws.ID))
+				Expect(movies[0].ID).To(Equal(records[0].ID))
 			})
 		})
 
 		Context("when a limit is provided", func() {
 			It("limits the number of movies returned", func() {
-				jaws := &critic.Movie{
-					Title: "Jaws",
-					Year:  "1975",
-				}
-				tx.Create(jaws)
-
-				citizenKane := &critic.Movie{
-					Title: "Citizen Kane",
-					Year:  "1941",
-				}
-				tx.Create(citizenKane)
-
-				movies, err := db.Query(
-					critic.MovieQueryParams{},
-					critic.MovieListOptions{
-						Limit: 1,
-					},
-				)
+				movies, err := db.Query(map[critic.MovieQueryParam]interface{}{
+					critic.MovieQueryParamLimit: 1,
+				})
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(movies).ToNot(BeNil())
 				Expect(movies).To(HaveLen(1))
-				Expect(movies[0].ID).To(Equal(citizenKane.ID))
+				Expect(movies[0].ID).To(Equal(records[1].ID))
 			})
 		})
 	})
 
 	Describe("Get", func() {
 		var tx *MovieTx
+		var record = &critic.Movie{
+			Title: "Jaws",
+			Year:  "1975",
+		}
 
 		BeforeEach(func() {
-			tx = db.Begin().(*MovieTx)
+			tx = db.BeginTx().(*MovieTx)
+			tx.Create(record)
+			tx.Commit()
+		})
+
+		AfterEach(func() {
+			tx = db.BeginTx().(*MovieTx)
+			tx.Delete(record.ID)
+			tx.Commit()
 		})
 
 		It("returns a movie", func() {
-			jaws := &critic.Movie{
-				Title: "Jaws",
-				Year:  "1975",
-			}
-
-			tx.Create(jaws)
-			tx.Commit()
-
-			movie, err := db.Get(jaws.ID)
+			movie, err := db.Get(record.ID)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(movie).ToNot(BeNil())
-			Expect(movie.ID).To(Equal(jaws.ID))
+			Expect(movie.ID).To(Equal(record.ID))
 		})
 
 		Context("when the movie does not exist", func() {
 			It("returns a not found error", func() {
-				tx.Create(&critic.Movie{
-					Title: "Jaws",
-					Year:  "1975",
-				})
-				tx.Commit()
-
 				_, err := db.Get(0)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(ErrNotFound))
